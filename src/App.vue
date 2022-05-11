@@ -1,5 +1,6 @@
 <template>
   <div id="app" class="main-div" @mouseleave="stopDrawing" @mouseup.left="stopDrawing">
+    <div>
     <div style="display: flex; flex-direction: row; align-items: center">
       <button class="btn btn-primary" id="uploadbtn" @click="upload">Загрузить</button>
       <button class="btn btn-primary" id="savebtn" @click="download">Скачать</button>
@@ -31,6 +32,9 @@
       </div>
       <canvas id="paint_field" class="canvas" width=400 height=300 @mousemove="draw" @mousedown.left="beginDrawing" @mouseleave="ResetCords" v-on:keyup="return_back"/>
     </div>
+    </div>
+    <div class="footer">
+    </div>
   </div>
 </template>
 
@@ -49,6 +53,8 @@ export default {
   data(){
     return{
       canvas: null,
+      canvasHeight: 0,
+      canvasWidth: 0,
       history: [],
       x: 0,
       y: 0,
@@ -383,4 +389,15 @@ input[type="number"]::-webkit-inner-spin-button {
 .canvas{
   border: 2px dashed black;
 }
+
+.footer {
+  min-height: 30px; /* Высота слоя */
+  bottom: 0;
+  width: 100%;
+  z-index: 999999;
+  background: #2A6478;
+  position: fixed;
+  border-bottom: 2px solid #000;
+}
+
 </style>
