@@ -1,49 +1,55 @@
 <template>
-  <div id="app" class="main-div" @mouseleave="stopDrawing" @mouseup.left="stopDrawing">
+  <div id="app" class="main-div">
     <div>
     <div style="display: flex; flex-direction: row; align-items: center">
       <button class="btn btn-primary" id="uploadbtn" @click="upload">Загрузить</button>
       <button class="btn btn-primary" id="savebtn" @click="download">Скачать</button>
-    <ImgEditFuncs @resize-canvas="resize" @apply-filters="filters" @apply-brightness-contrast="brightness_contrast"
-                  @flip-horizontal="flip_horizontal" @flip-vertical="flip_vertical" @rotate="rotate_90"
+      <button class="btn btn-primary" id="uploadbtnJSON" @click="uploadJSON" style="min-width: 150px">Загрузить JSON</button>
+      <button class="btn btn-primary" id="savebtnJSON" @click="downloadJSON" style="min-width: 150px">Скачать JSON</button>
+    <ImgEditFuncs @resize-canvas="resize" @apply-filters="applyFilters" @apply-brightness-contrast="brightness_contrast"
+                  @apply-effects="applyEffects" @flip-horizontal="flip_horizontal" @flip-vertical="flip_vertical" @rotate="rotate_90"
     />
     </div>
     <div class="painter-div">
-      <div style="margin-right: 1%">
-      <Chrome v-model="colors"/>
+      <div style="margin-right: 1%; max-width: 230px;">
+        <Chrome  v-model="cpcolor"
+        />
         <div style="display: flex; flex-direction: column;">
       <div style="margin-top: 3%; display: flex; flex-direction: row;">
-        <button class="btn btn-light" @click="MinusWidth" style="margin-right: 1%; background: #E0E0E0;">-</button>
-        <input class="form-control" style="width: 70px;" type="number" v-model="lineWidth">
-        <button class="btn btn-light" @click="PlusWidth" style="margin-left: 1%; background: #E0E0E0;">+</button>
+        <input class="form-control" style="width: 225px;" type="number" :value="lineWidth" @input="setLineWidth">
       </div>
           Тип линии
-          <div id="line-types" style="margin-top: 3%; display: flex; flex-direction: row;">
-          <button class="btn btn-light" value="round" @click="setTool" style="margin-right: 1%; background: #AAAAAA;">●</button>
-            <button class="btn btn-light" value="butt" @click="setTool" style="margin-right: 1%; background: #E0E0E0">/</button>
-            <button class="btn btn-light" value="square" @click="setTool" style="margin-right: 1%; background: #E0E0E0">■</button>
+          <div id="line-types" style="margin-top: 3%; display: flex; flex-direction: row; flex-flow: row wrap;">
+            <button class="btn btn-light" value="select" @click="setTool" style="margin-right: 1%; background: #AAAAAA; min-width: 100px;">рука</button>
+            <button class="btn btn-light" value="pencil" @click="setTool" style="margin-right: 1%; background: #E0E0E0; min-width: 100px;">обычная</button>
+            <button class="btn btn-light" value="round" @click="setTool" style="margin-right: 1%; background: #E0E0E0; min-width: 100px;">круглая</button>
+            <button class="btn btn-light" value="spray" @click="setTool" style="margin-right: 1%; background: #E0E0E0; min-width: 100px;">спрей</button>
           </div>
           Инструменты
-          <div id="tools" style="margin-top: 3%; display: flex; flex-direction: row;">
-            <button class="btn btn-light" value="filler" @click="setTool" style="margin-right: 1%; background: #E0E0E0">Заливка</button>
-            <button class="btn btn-light" value="colorSucker" @click="setTool" style="margin-right: 1%; background: #E0E0E0">Пипетка</button>
+          <div id="tools" style="margin-top: 3%; display: flex; flex-direction: row; flex-flow: row wrap;">
+            <button class="btn btn-light" value="colorsucker" @click="setTool" style="margin-right: 1%; background: #E0E0E0; min-width: 100px;">пипетка</button>
+            <button class="btn btn-light" @click="addText" style="margin-right: 1%; background: #E0E0E0; min-width: 100px;">текст</button>
           </div>
       </div>
       </div>
-      <canvas id="paint_field" class="canvas" width=400 height=300 @mousemove="draw" @mousedown.left="beginDrawing" @mouseleave="ResetCords" v-on:keyup="return_back"/>
+      <canvas id="paint_field" class="canvas" width=800 height=600 @mousedown="console.log('a')" v-on:keyup="return_back"/>
     </div>
     </div>
     <div class="footer">
+      <input type="range" @change="setZoom" min="25" max="200" step="25" :value="zoom">{{ zoom }}%
     </div>
   </div>
 </template>
 
 <script>
-import fs from 'fs'
+import fs from 'fs';
 const {dialog} = require('@electron/remote');
+
 import {Chrome} from '@ckpack/vue-color';
-import resizeCanvas from 'resize-canvas'
 import ImgEditFuncs from "@/components/ImgEditFuncs";
+const fabric = require("fabric").fabric;
+import 'fabric';
+import 'fabric-history';
 
 
 
@@ -52,136 +58,218 @@ export default {
   name: "App",
   data(){
     return{
-      canvas: null,
       canvasHeight: 0,
       canvasWidth: 0,
       history: [],
       x: 0,
       y: 0,
       lineWidth: 5,
-      scale: 1,
-      tool: 'round',
+      zoom: 100,
+      canvasAngle: 0,
+      tool: 'select',
+      canvas2dBackend: null,
       activeToolColor: '#AAAAAA',
       inactiveToolColor: '#E0E0E0',
-      isDrawing: false,
-      colors: {rgba: {r: 0, g: 0, b: 0, a: 1}}
-    }
-  },
+      colors: 'rgba(0, 0, 0, 1)',
+      cpcolor: 'rgba(0, 0, 0, 1)',
+      filters: { 'grayscale': [0, new fabric.Image.filters.Grayscale()], 'invert': [1, new fabric.Image.filters.Invert()],
+        'sepia': [3, new fabric.Image.filters.Sepia()], 'polaroid': [2, new fabric.Image.filters.Polaroid()], 'hue': [4, new fabric.Image.filters.HueRotation(), 'rotation'],
+        'vibrance': [8, new fabric.Image.filters.Vibrance(), 'vibrance'], 'blur': [9, new fabric.Image.filters.Blur(), 'blur']}
+      }
+    },
   mounted() {
-    let c = document.getElementById("paint_field");
-    this.canvas = c.getContext('2d');
-    this.canvas.imageSmoothingQuality = 'high';
-    this.canvas.imageSmoothingEnabled = true;
-    document.addEventListener('keyup', this.keyupHandler)
+    this.canvas = new fabric.Canvas("paint_field");
+    document.addEventListener('keyup', this.keyupHandler);
+    this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
+    this.canvas.freeDrawingBrush.selectable = false;
+    this.canvas.freeDrawingBrush.evented = false;
+    this.canvas.uniScaleTransform = true;
+    this.canvas2dBackend = new fabric.Canvas2dFilterBackend();
+    fabric.filterBackend = fabric.initFilterBackend();
   },
   components: {ImgEditFuncs, Chrome},
+  watch: {
+    cpcolor(){
+      this.changeColor();
+    }
+  },
   methods: {
     keyupHandler (event) {
       if (event.ctrlKey && event.code === 'KeyZ') {
-        this.return_back()
+        this.canvas.undo();
+      }
+      if (event.ctrlKey && event.code === 'KeyY') {
+        this.canvas.redo();
+      }
+      if (event.code === 'Delete') {
+        let objects = this.canvas.getActiveObjects();
+        for (let i in objects) {
+          this.canvas.remove(objects[i]);
+        }
+        this.canvas.renderAll();
+      }
+      if (event.shiftKey && event.code === 'ArrowDown') {
+        console.log('down')
+        let objects = this.canvas.getActiveObjects();
+        let ind;
+        for (let i in objects) {
+          ind = this.canvas.getObjects().indexOf(objects[i]);
+          this.canvas.moveTo(objects[i], Math.max(0, ind - 1));
+          objects[i].moveTo(Math.max(0, ind - 1));
+        }
+        this.canvas.discardActiveObject().renderAll();
+      }
+      if (event.shiftKey && event.code === 'ArrowUp') {
+        console.log('up')
+        let objects = this.canvas.getActiveObjects();
+        let ind;
+        for (let i in objects) {
+          ind = this.canvas.getObjects().indexOf(objects[i]);
+          this.canvas.moveTo(objects[i], Math.min(this.canvas.getObjects().length, ind + 1));
+          objects[i].moveTo(Math.min(this.canvas.getObjects().length, ind + 1));
+        }
+        this.canvas.discardActiveObject().renderAll();
       }
     },
-    getTempCanvas(){
-      let tempCanvas = document.createElement('canvas');
-      tempCanvas.width = this.canvas.canvas.width;
-      tempCanvas.height = this.canvas.canvas.height;
-      tempCanvas.imageSmoothingQuality = 'high';
-      tempCanvas.imageSmoothingEnabled = true;
-      tempCanvas = tempCanvas.getContext("2d");
-      tempCanvas.drawImage(this.canvas.canvas, 0, 0);
-      return tempCanvas;
-    },
-    make_history(){
-      if(this.history.length === 5){
-        this.history.shift();
-      }
-      let tempCanvas = this.getTempCanvas();
-      this.history.push(tempCanvas.canvas);
-      console.log('added');
-    },
-    return_back(){
-      if (this.history.length > 0) {
-        let oldCanvas = this.history.pop();
-        this.canvas.canvas.width = oldCanvas.width;
-        this.canvas.canvas.height = oldCanvas.height;
-        this.canvas.drawImage(oldCanvas, 0, 0);
-      }
+    changeColor(){
+      const {r, g, b, a} = this.cpcolor.rgba;
+      this.colors = `rgba(${r}, ${g}, ${b}, ${a})`;
+      this.canvas.freeDrawingBrush.color = `rgba(${r}, ${g}, ${b}, ${a})`;
     },
     flip_horizontal(){
-      this.make_history();
-      let tempCanvas = this.getTempCanvas();
-      this.canvas.translate(this.canvas.canvas.width, 0);
-      this.canvas.scale(-1, 1);
-      this.canvas.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
-      this.canvas.drawImage(tempCanvas.canvas, 0, 0);
-      this.canvas.scale(-1, 1);
-      this.canvas.translate(-this.canvas.canvas.width, 0);
+      this.canvas.getObjects().forEach((obj) => {
+        obj.flipX = !obj.flipX;
+      });
+      this.canvas.renderAll();
     },
     flip_vertical(){
-      this.make_history();
-      let tempCanvas = this.getTempCanvas();
-      this.canvas.translate(0, this.canvas.canvas.height);
-      this.canvas.scale(1, -1);
-      this.canvas.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
-      this.canvas.drawImage(tempCanvas.canvas, 0, 0);
-      this.canvas.scale(1, -1);
-      this.canvas.translate(0, -this.canvas.canvas.height);
+      this.canvas.getObjects().forEach((obj) => {
+        obj.flipY = !obj.flipY;
+      });
+      this.canvas.renderAll();
+
     },
     rotate_90(){
-      this.make_history();
-      let tempCanvas = this.getTempCanvas();
-      this.canvas.canvas.width = tempCanvas.canvas.height;
-      this.canvas.canvas.height = tempCanvas.canvas.width;
-      this.canvas.rotate(90*Math.PI/180);
-      this.canvas.drawImage(tempCanvas.canvas, 0, -this.canvas.canvas.width);
-      this.canvas.rotate(270*Math.PI/180);
+      let PositionAdjustment = ((this.canvas.getWidth() - this.canvas.getHeight()) / 2);
+
+      this.canvasAngle = 90;
+      let canvasCenter = new fabric.Point(this.canvas.getWidth() / 2, this.canvas.getHeight() / 2)
+      let radians = fabric.util.degreesToRadians(this.canvasAngle)
+
+      this.canvas.getObjects().forEach((obj) => {
+        let objectOrigin = new fabric.Point((obj.left + PositionAdjustment), obj.top + PositionAdjustment)
+        let new_loc = fabric.util.rotatePoint(objectOrigin, canvasCenter, radians)
+        obj.top = new_loc.y
+        obj.left = new_loc.x
+        obj.angle += this.canvasAngle;
+        obj.setCoords();
+      });
+      const w = this.canvas.getWidth();
+      const h = this.canvas.getHeight();
+      this.canvas.setWidth(h);
+      this.canvas.setHeight(w);
+      this.canvas.renderAll();
     },
     resize(resizeType, w, h){
-      this.make_history();
-      if (resizeType === 'scale') {
-        let tempCanvas = document.createElement('canvas');
-
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        tempCanvas = tempCanvas.getContext("2d");
-        tempCanvas.imageSmoothingQuality = 'high';
-        tempCanvas.imageSmoothingEnabled = true;
-        tempCanvas.drawImage(this.canvas.canvas, 0, 0, this.canvas.canvas.width, this.canvas.canvas.height, 0, 0, w, h);
-
-        this.canvas.canvas.height = h;
-        this.canvas.canvas.width = w;
-
-        this.canvas.drawImage(tempCanvas.canvas, 0, 0, w, h)
-      }else {
-        resizeCanvas({
-          canvas: this.canvas.canvas,
-          diff: [w - this.canvas.canvas.width, h - this.canvas.canvas.height],
-          from: [0, 0]
-        })
+      this.resetZoom();
+      if (this.canvas.width !== w || this.canvas.height !== h) {
+        let scaleMultiplierX = w / this.canvas.width;
+        let scaleMultiplierY = h / this.canvas.height;
+        if(resizeType === 'scale') {
+          let objects = this.canvas.getObjects();
+          for (let i in objects) {
+            objects[i].scaleX = objects[i].scaleX * scaleMultiplierX;
+            objects[i].scaleY = objects[i].scaleY * scaleMultiplierY;
+            objects[i].left = objects[i].left * scaleMultiplierX;
+            objects[i].top = objects[i].top * scaleMultiplierY;
+            objects[i].setCoords();
+          }
+          let obj = this.canvas.backgroundImage;
+          if (obj) {
+            obj.scaleX = obj.scaleX * scaleMultiplierX;
+            obj.scaleY = obj.scaleY * scaleMultiplierY;
+          }
+        }
+        this.canvas.discardActiveObject();
+        this.canvas.setWidth(this.canvas.getWidth() * scaleMultiplierX);
+        this.canvas.setHeight(this.canvas.getHeight() * scaleMultiplierY);
+        this.canvas.renderAll();
+        this.canvas.calcOffset();
       }
     },
-    filters(grayscale, sepia, invert){
-      this.make_history();
-      this.canvas.filter = `invert(${invert / 100}) sepia(${sepia / 100}) grayscale(${grayscale / 100})`;
-      this.canvas.drawImage(this.canvas.canvas, 0, 0);
-      this.canvas.filter = 'none';
+    resetZoom(){
+      this.canvas.setZoom(this.canvas.getZoom()*(1/(this.zoom / 100)));
+      this.canvas.setWidth(this.canvas.getWidth() * (1/(this.zoom / 100)));
+      this.canvas.setHeight(this.canvas.getHeight() * (1/(this.zoom / 100)));
+      this.zoom = 100;
     },
-    brightness_contrast(brightness, contrast, saturate){
-      this.make_history();
-      this.canvas.filter = `brightness(${brightness / 100}) contrast(${contrast / 100}) saturate(${saturate / 100})`;
-      this.canvas.drawImage(this.canvas.canvas, 0, 0);
-      this.canvas.filter = 'none';
+    setZoom(e) {
+      this.resetZoom();
+      this.zoom = e.target.value;
+      let zoom = Number(e.target.value) / 100;
+      this.canvas.setZoom(this.canvas.getZoom() * zoom);
+      this.canvas.setWidth(this.canvas.getWidth() * zoom);
+      this.canvas.setHeight(this.canvas.getHeight() * zoom);
+      this.canvas.renderAll();
     },
-    drawLine(x1, y1, x2, y2) {
-      this.canvas.beginPath();
-      const {rgba: {r, g, b, a}} = this.colors;
-      this.canvas.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
-      this.canvas.lineWidth = this.lineWidth;
-      this.canvas.lineCap = this.tool;
-      this.canvas.moveTo(x1, y1);
-      this.canvas.lineTo(x2, y2);
-      this.canvas.stroke();
-      this.canvas.closePath();
+    applyFilters(allObjects, f) {
+      let objects;
+      if (allObjects) {
+        objects = this.canvas.getObjects();
+      }else {
+        objects = this.canvas.getActiveObjects();
+      }
+        for (let i in objects) {
+          for (let j in Object.keys(this.filters)) {
+            let f_key = Object.keys(this.filters)[j];
+            if (objects[i].type !== "path") {
+              if (f[f_key]) {
+                objects[i].filters[this.filters[f_key][0]] = this.filters[f_key][1]
+              } else {
+                objects[i].filters[this.filters[f_key][0]] = null;
+              }
+              objects[i].applyFilters();
+            }
+          }
+        }
+      this.canvas.renderAll();
+    },
+    applyEffects(allObjects, f) {
+      let objects;
+      if (allObjects) {
+        objects = this.canvas.getObjects();
+      }else {
+        objects = this.canvas.getActiveObjects();
+      }
+      let f_keys = Object.keys(f);
+      for (let i in objects) {
+        for (let j in Object.keys(this.filters)) {
+          let f_key = Object.keys(this.filters)[j];
+          if (objects[i].type !== "path" && f_keys.indexOf(f_key) !== -1) {
+            objects[i].filters[this.filters[f_key][0]] = this.filters[f_key][1];
+            objects[i].filters[this.filters[f_key][0]][this.filters[f_key][2]] = f[f_key] / 100;
+            objects[i].applyFilters();
+          }
+        }
+      }
+      this.canvas.renderAll();
+    },
+    brightness_contrast(allObjects, brightness, contrast, saturate){
+      let objects;
+      if (allObjects) {
+        objects = this.canvas.getObjects();
+      }else {
+        objects = this.canvas.getActiveObjects();
+      }
+      for (let i in objects) {
+        if (objects[i].type !== "path") {
+          objects[i].filters[5] = new fabric.Image.filters.Brightness({brightness: brightness / 100});
+          objects[i].filters[6] = new fabric.Image.filters.Contrast({contrast: contrast / 100});
+          objects[i].filters[7] = new fabric.Image.filters.Saturation({saturation: saturate / 100});
+          objects[i].applyFilters();
+        }
+      }
+      this.canvas.renderAll();
     },
     resetTools(){
       let tools = document.getElementById("tools");
@@ -195,144 +283,104 @@ export default {
         elem.style.background = this.inactiveToolColor;
       }
     },
+    colorsuckerHandler(e){
+      let pointer = this.canvas.getPointer(e);
+      let posX = pointer.x;
+      let posY = pointer.y;
+
+      let activeObject = this.canvas.getActiveObject();
+      if(activeObject) {
+        console.log(posX, posY);
+        let new_color = this.pixelAt(activeObject.canvas.getContext("2d"), posX, posY)
+        this.cpcolor = {rgba: {r:new_color[0], g:new_color[1], b:new_color[2], a:new_color[3] }}
+      }
+    },
     setTool(e){
       this.resetTools();
       this.tool = e.target.value;
       e.target.style.background = this.activeToolColor;
-    },
-    draw(e) {
-      if (this.isDrawing) {
-        if (this.x === -1 && this.y === -1) {
-          this.drawLine(e.offsetX, e.offsetY, e.offsetX, e.offsetY);
-        }
-        else{
-          this.drawLine(this.x, this.y, e.offsetX, e.offsetY);
-        }
-        this.x = e.offsetX;
-        this.y = e.offsetY;
+      this.canvas.off('mouse:down', this.colorsuckerHandler);
+      this.canvas.isDrawingMode = false;
+      switch (this.tool) {
+        case "select":
+          this.canvas.isDrawingMode = false;
+          break;
+        case "round":
+          this.canvas.freeDrawingBrush = new fabric.CircleBrush(this.canvas);
+          this.canvas.freeDrawingBrush.width = this.lineWidth;
+          this.canvas.freeDrawingBrush.color = this.colors;
+          this.canvas.isDrawingMode = true;
+          break;
+        case "pencil":
+          this.canvas.freeDrawingBrush = new fabric.PencilBrush(this.canvas);
+          this.canvas.freeDrawingBrush.width = this.lineWidth;
+          this.canvas.freeDrawingBrush.color = this.colors;
+          this.canvas.isDrawingMode = true;
+          break;
+        case "spray":
+          this.canvas.freeDrawingBrush = new fabric.SprayBrush(this.canvas);
+          this.canvas.freeDrawingBrush.width = this.lineWidth;
+          this.canvas.freeDrawingBrush.color = this.colors;
+          this.canvas.isDrawingMode = true;
+          break;
+        case "colorsucker":
+          this.canvas.isDrawingMode = false;
+          this.canvas.on('mouse:down', this.colorsuckerHandler);
+          break;
+        default:
+          break;
       }
     },
-    fill_canvas(startX, startY){
-      let img = this.canvas.getImageData(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
-      let imgData = img.data;
-      const {rgba: {r, g, b}} = this.colors;
-      let canvasWidth = this.canvas.canvas.width;
-      let canvasHeight = this.canvas.canvas.height;
-      let r_target = imgData[startY * canvasWidth * 4 + startX * 4];
-      let g_target = imgData[startY * canvasWidth * 4 + startX * 4 + 1];
-      let b_target = imgData[startY * canvasWidth * 4 + startX * 4 + 2];
-      if (startX > 0 && startX < this.canvas.canvas.width && startY > 0 && startY < this.canvas.canvas.height) {
-        let pixelStack = [[startX, startY]];
-        let newPos, x, y, pixelPos;
-        let colored = Array(canvasWidth * canvasHeight * 4).fill(0);
-        while (pixelStack.length > 0) {
-          newPos = pixelStack.pop();
-          x = newPos[0];
-          y = newPos[1];
-          pixelPos = (y * canvasWidth + x) * 4;
-          while (y-- >= 0 && this.matchStartColor(pixelPos, imgData, r_target, g_target, b_target) && colored[pixelPos] !== 1) {
-            pixelPos -= canvasWidth * 4;
-          }
-          pixelPos += canvasWidth * 4;
-          ++y;
-          while (y++ < canvasHeight - 1 && this.matchStartColor(pixelPos, imgData, r_target, g_target, b_target) && colored[pixelPos] !== 1) {
-            this.colorPixel(pixelPos, imgData, r, g ,b);
-            colored[pixelPos] = 1;
-            if (x > 0) {
-              if (this.matchStartColor(pixelPos - 4, imgData, r_target, g_target, b_target) && colored[pixelPos - 4] !== 1) {
-                  pixelStack.push([x - 1, y]);
-              }
-            }
-
-            if (x < canvasWidth - 1) {
-              if (this.matchStartColor(pixelPos + 4, imgData, r_target, g_target, b_target) && colored[pixelPos + 4] !== 1) {
-                  pixelStack.push([x + 1, y]);
-              }
-            }
-
-            pixelPos += canvasWidth * 4;
-          }
-        }
-        this.canvas.putImageData(img, 0, 0);
-      }
+    addText(){
+      let text = new fabric.IText('Пример текста', {
+        fontFamily: 'arial black',
+        left: 100,
+        top: 100 ,
+        fill: this.colors
+      });
+      this.canvas.add(text);
+      this.canvas.setActiveObject(text);
+      this.canvas.renderAll();
     },
-    matchStartColor(pixelPos, imgData, r_target, g_target, b_target) {
-      let r_current = imgData[pixelPos];
-      let g_current = imgData[pixelPos + 1];
-      let b_current = imgData[pixelPos + 2];
-
-      return (r_current === r_target && g_current === g_target && b_current === b_target);
+    setLineWidth(e){
+      this.lineWidth = Number(e.target.value);
+      this.canvas.freeDrawingBrush.width = this.lineWidth;
     },
-    colorPixel(pixelPos, imgData, r, g ,b) {
-      imgData[pixelPos] = r;
-      imgData[pixelPos + 1] = g;
-      imgData[pixelPos + 2] = b;
-      imgData[pixelPos + 3] = 255;
+    getRGB(str){
+      let match = str.match(/rgba?\((\d{1,4}), ?(\d{1,4}), ?(\d{1,4}), ?(\d{1,4})\)?(?:, ?(\d(?:\.\d*)?)\))?/);
+      return match ? {
+        r: match[1],
+        g: match[2],
+        b: match[3],
+        a: match[4]
+      } : {};
     },
-    pixelAt(x, y) {
-      return this.canvas.getImageData(x, y, 1, 1).data;
-    },
-    beginDrawing(e) {
-      if(this.tool === 'colorSucker'){
-        let color = this.pixelAt(e.offsetX, e.offsetY);
-        this.colors = {rgba: {r: color[0], g: color[1], b: color[2], a: color[3]}}
-      }
-      else if (this.tool === 'filler') {
-        this.make_history();
-        this.fill_canvas(e.offsetX, e.offsetY);
-      }else {
-        this.make_history();
-        this.x = e.offsetX;
-        this.y = e.offsetY;
-        this.drawLine(this.x, this.y, this.x, this.y)
-        this.isDrawing = true;
-      }
-    },
-    stopDrawing() {
-      this.isDrawing = false;
-    },
-    ResetCords() {
-      this.x = -1;
-      this.y = -1;
-    },
-    PlusWidth() {
-      this.lineWidth = this.lineWidth + 1;
-    },
-    MinusWidth() {
-      this.lineWidth = this.lineWidth - 1;
-      if (this.lineWidth < 1){
-        this.lineWidth = 1;
-      }
+    pixelAt(object, x, y) {
+      return object.getImageData(x, y, 1, 1).data;
     },
     download() {
       dialog.showSaveDialog({filters: [
           { name: 'PNG', extensions: ['png'] },
           { name: 'JPEG', extensions: ['jpg'] }
         ], defaultPath: 'result.png'}).then((result) => {
-        let url = this.canvas.canvas;
         let base64Data = null;
-        console.log(result.filePath);
+        this.resetZoom();
         if (result.filePath.includes('png')) {
-          url = url.toDataURL('image/png');
+          let url = this.canvas.toDataURL({
+            format: 'png',
+            enableRetinaScaling: true
+          });
           base64Data = url.replace(/^data:image\/png;base64,/, "");
         }else{
-          let tempCanvas = document.createElement('canvas').getContext("2d");
-          tempCanvas.canvas.width = this.canvas.canvas.width;
-          tempCanvas.canvas.height = this.canvas.canvas.height;
-          let imgData=this.canvas.getImageData(0,0,this.canvas.canvas.width, this.canvas.canvas.height);
-          let data=imgData.data;
-          for(let i=0;i<data.length;i+=4) {
-            if (data[i + 3] === 0) {
-              data[i] = 255;
-              data[i + 1] = 255;
-              data[i + 2] = 255;
-              data[i + 3] = 255;
-            }
-          }
-          tempCanvas.putImageData(imgData, 0, 0);
-          url = tempCanvas.canvas.toDataURL('image/jpeg', 1.0);
+          this.canvas.setBackgroundColor('rgba(255, 255, 255, 1)', this.canvas.renderAll.bind(this.canvas));
+          let url = this.canvas.toDataURL({
+            format: 'jpeg',
+            enableRetinaScaling: true
+          });
           base64Data = url.replace(/^data:image\/jpeg;base64,/, "");
+          this.canvas.setBackgroundColor('rgba(255, 255, 255, 0)', this.canvas.renderAll.bind(this.canvas));
         }
+        this.canvas.renderAll();
         fs.writeFile(result.filePath, base64Data, 'base64', function (err) {
           console.log(err);
         });
@@ -344,17 +392,48 @@ export default {
       dialog.showOpenDialog({filters: [
           { name: 'Images', extensions: ['png', 'jpeg', 'jpg'] }
         ], properties: ['openFile']}).then((result) => {
-          this.make_history();
+          this.resetZoom();
           let img = new Image();
           img.src = result.filePaths;
           let parent = this;
           img.onload = function () {
-            parent.canvas.canvas.width = this.naturalWidth;
-            parent.canvas.canvas.height = this.naturalHeight;
-            parent.canvas.drawImage(this, 0, 0);
+            let image = new fabric.Image(this);
+            image.set({
+              angle: 0,
+              height:this.naturalHeight,
+              width:this.naturalWidth,
+            });
+            parent.canvas.centerObject(image);
+            parent.canvas.add(image);
+            parent.canvas.setActiveObject(image);
+            parent.canvas.renderAll();
           }
       }).catch((err) => {
         err
+      });
+    },
+    downloadJSON() {
+      dialog.showSaveDialog({filters: [
+          { name: 'json', extensions: ['json'] }
+        ], defaultPath: 'resultjson.json'}).then((result) => {
+        this.resetZoom();
+        fs.writeFile(result.filePath,  JSON.stringify(this.canvas), function (err) {
+          console.log(err);
+        });
+      }).catch((err) => {
+        err
+      });
+    },
+    uploadJSON() {
+      dialog.showOpenDialog({filters: [
+          { name: 'JSONS', extensions: ['json'] }
+        ], properties: ['openFile']}).then((result) => {
+        this.resetZoom();
+        this.canvas.clear();
+        this.canvas.loadFromJSON(JSON.parse(fs.readFileSync(result.filePaths[0], 'utf8')));
+        this.canvas.renderAll();
+      }).catch((err) => {
+        console.log(err)
       });
     }
   }
@@ -362,13 +441,6 @@ export default {
 </script>
 
 <style>
-
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-input[type="number"]::-webkit-inner-spin-button {
-  display: none;
-}
 
 
 .main-div{
@@ -395,7 +467,7 @@ input[type="number"]::-webkit-inner-spin-button {
   bottom: 0;
   width: 100%;
   z-index: 999999;
-  background: #2A6478;
+  background: #76B8D0;
   position: fixed;
   border-bottom: 2px solid #000;
 }

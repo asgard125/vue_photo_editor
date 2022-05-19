@@ -1,5 +1,5 @@
 <template>
-  <div style="display: flex; flex-direction: row; align-items: center">
+  <div style="display: flex; flex-direction: row; align-items: center; background: #76B8D0; width: 100%">
   <div class="dropdown">
     <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
       Изменить размер
@@ -24,6 +24,7 @@
       </button>
       <div class="dropdown-menu" style="margin: 2%; min-width: 200px" aria-labelledby="dropdownMenuButton1">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-around">
+          <div><input type="checkbox" v-model="allObjectsBandC">Все объекты</div>
         <center>Яркость</center>
         <input type="range" v-model="brightness" min="50" max="150">{{ brightness }}%
         <center>Контраст</center>
@@ -35,17 +36,35 @@
       </div>
     </div>
     <div class="dropdown">
+      <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton5" data-bs-toggle="dropdown" aria-expanded="false">
+        Эффекты
+      </button>
+      <div class="dropdown-menu" style="margin: 2%; min-width: 200px" aria-labelledby="dropdownMenuButton5">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-around">
+          <div><input type="checkbox" v-model="allObjectsEffects">Все объекты</div>
+          <center>Цвета</center>
+          <input type="range" v-model="hue" min="0" max="200">{{ hue }}%
+          <center>Размытие</center>
+          <input type="range" v-model="blur" min="0" max="100">{{ blur }}%
+          <center>Выделение деталей</center>
+          <input type="range" v-model="vibrance" min="0" max="200">{{ vibrance }}%
+          <button class="btn btn-primary" id="apply_effects" @click=send_effects_data>Применить</button>
+        </div>
+      </div>
+    </div>
+    <div class="dropdown">
       <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton3" data-bs-toggle="dropdown" aria-expanded="false">
         Фильтры
       </button>
       <div class="dropdown-menu" style="margin: 2%; min-width: 200px" aria-labelledby="dropdownMenuButton2">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-around">
-          <center>Негатив</center>
-          <input type="range" v-model="invert" min="0" max="100">{{ invert }}%
-          <center>Сепия</center>
-          <input type="range" v-model="sepia" min="0" max="100">{{ sepia }}%
-          <center>Оттенки серого</center>
-          <input type="range" v-model="grayscale" min="0" max="100">{{ grayscale }}%
+          <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: space-around">
+          <div><input type="checkbox" v-model="allObjectsFilter">Все объекты</div>
+          <div><input type="checkbox" v-model="invert">Негатив</div>
+          <div><input type="checkbox" v-model="sepia">Сепия</div>
+          <div><input type="checkbox" v-model="grayscale">Оттенки серого</div>
+          <div><input type="checkbox" v-model="polaroid">Полароид</div>
+            </div>
           <button class="btn btn-primary" id="apply_filters" @click=send_filters_data>Применить</button>
         </div>
       </div>
@@ -78,24 +97,41 @@ export default {
       brightness: 100,
       contrast: 100,
       saturate: 100,
-      grayscale: 0,
-      sepia: 0,
-      invert: 0,
+      grayscale: false,
+      sepia: false,
+      invert: false,
+      polaroid: false,
+      hue: 100,
+      blur: 0,
+      vibrance: 100,
+      allObjectsBandC: false,
+      allObjectsFilter: false,
+      allObjectsEffects: false,
 
     }
   },
   methods: {
     send_brightness_contrast_data(){
-      this.$emit('apply-brightness-contrast', this.brightness, this.contrast, this.saturate);
+      this.$emit('apply-brightness-contrast', this.allObjectsBandC, this.brightness - 100, this.contrast - 100, this.saturate - 100);
       this.brightness = 100;
       this.contrast = 100;
       this.saturate = 100;
+      this.allObjectsBandC = false;
     },
     send_filters_data(){
-      this.$emit('apply-filters', this.grayscale, this.sepia, this.invert);
-      this.grayscale = 0;
-      this.sepia = 0;
-      this.invert = 0;
+      this.$emit('apply-filters', this.allObjectsFilter, {'grayscale': this.grayscale, 'sepia': this.sepia, 'invert': this.invert, 'polaroid': this.polaroid});
+      this.grayscale = false;
+      this.sepia = false;
+      this.invert = false;
+      this.polaroid = false;
+      this.allObjectsFilter = false;
+    },
+    send_effects_data(){
+      this.$emit('apply-effects', this.allObjectsEffects, {'hue': this.hue - 100, 'blur': this.blur, 'vibrance': this.vibrance - 100});
+      this.hue = 100;
+      this.blur = 0;
+      this.vibrance = 100;
+      this.allObjectsEffects = false;
     }
   }
 }
@@ -104,8 +140,9 @@ export default {
 <style scoped>
 
 .btn-secondary{
-  background-color: #9B9B9C;
-  border-color: #9B9B9C;
+  background-color: #76B8D0;
+  border-color: #76B8D0;
 }
+
 
 </style>
