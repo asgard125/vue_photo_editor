@@ -1,5 +1,9 @@
 # vue3-electron
 
+it's a desktop paint/photoshop-like project on vue 3 + electron
+
+Was made as a homework for university
+
 ## Project setup
 ```
 yarn install
