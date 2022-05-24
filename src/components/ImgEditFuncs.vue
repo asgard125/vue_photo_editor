@@ -92,8 +92,8 @@ export default {
   data() {
     return {
       resizeType: 'scale',
-      width: 400,
-      height: 300,
+      width: 800,
+      height: 600,
       brightness: 100,
       contrast: 100,
       saturate: 100,
